@@ -1,0 +1,88 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate config.js from secrets
+        env:
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          ADMIN_PIN: ${{ secrets.ADMIN_PIN }}
+          OWNER_NAME: ${{ secrets.OWNER_NAME }}
+        run: |
+          python3 - << 'EOF'
+          import os, json, sys
+
+          required = [
+            "FIREBASE_API_KEY", "FIREBASE_AUTH_DOMAIN", "FIREBASE_PROJECT_ID",
+            "FIREBASE_STORAGE_BUCKET", "FIREBASE_MESSAGING_SENDER_ID",
+            "FIREBASE_APP_ID", "NTFY_TOPIC", "ADMIN_PIN"
+          ]
+          missing = [k for k in required if not os.environ.get(k)]
+          if missing:
+            print(f"::error::Missing GitHub secrets: {', '.join(missing)}")
+            print("::error::See README.md → Step 7 for how to add secrets.")
+            sys.exit(1)
+
+          config = {
+            "firebase": {
+              "apiKey":            os.environ["FIREBASE_API_KEY"],
+              "authDomain":        os.environ["FIREBASE_AUTH_DOMAIN"],
+              "projectId":         os.environ["FIREBASE_PROJECT_ID"],
+              "storageBucket":     os.environ["FIREBASE_STORAGE_BUCKET"],
+              "messagingSenderId": os.environ["FIREBASE_MESSAGING_SENDER_ID"],
+              "appId":             os.environ["FIREBASE_APP_ID"]
+            },
+            "ntfy": {
+              "topic":  os.environ["NTFY_TOPIC"],
+              "server": "https://ntfy.sh"
+            },
+            "adminPin":  os.environ["ADMIN_PIN"],
+            "ownerName": os.environ.get("OWNER_NAME", "אומר")
+          }
+
+          js = "const CONFIG = " + json.dumps(config, ensure_ascii=False, indent=2) + ";"
+          with open("config.js", "w", encoding="utf-8") as f:
+            f.write(js)
+
+          print("config.js generated successfully ✓")
+          EOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
