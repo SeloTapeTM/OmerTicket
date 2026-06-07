@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="מערכת כרטיסיות משפחה">
+  <title>כרטיסיות משפחה</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <meta name="theme-color" content="#2563eb">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-inner">
+    <div class="app-title">
+      <span class="icon">🎫</span>
+      כרטיסיות משפחה
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon" id="ownerBtn" title="כניסת בעל הבית" onclick="toggleOwner()">
+        👤
+        <span class="owner-badge"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="app-wrapper">
+
+  <div id="setupBanner" class="setup-banner" style="display:none">
+    <h3>⚙️ נדרשת הגדרה ראשונית</h3>
+    <p>ערוך את הקובץ <strong>config.js</strong> והוסף את פרטי Firebase ושם הנושא של ntfy. ראה את ה-<a href="./README.md" target="_blank">README</a> להוראות מפורטות.</p>
+  </div>
+
+  <div class="filter-tabs" id="filterTabs">
+    <button class="filter-tab active" data-filter="all" onclick="setFilter('all')">
+      הכל <span class="count" id="count-all">0</span>
+    </button>
+    <button class="filter-tab" data-filter="open" onclick="setFilter('open')">
+      📬 פתוח <span class="count" id="count-open">0</span>
+    </button>
+    <button class="filter-tab" data-filter="in_progress" onclick="setFilter('in_progress')">
+      🔧 בטיפול <span class="count" id="count-in_progress">0</span>
+    </button>
+    <button class="filter-tab" data-filter="resolved" onclick="setFilter('resolved')">
+      ✅ נסגר <span class="count" id="count-resolved">0</span>
+    </button>
+  </div>
+
+  <div class="tickets-list" id="ticketsList">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>טוען כרטיסיות...</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- FAB -->
+<button class="fab" onclick="openNewTicketModal()">
+  ＋ כרטיסייה חדשה
+</button>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ─── New Ticket Modal ─── -->
+<div class="modal-overlay" id="newTicketModal" style="display:none" onclick="closeIfBackdrop(event,'newTicketModal')">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <div class="modal-header">
+      <h2 class="modal-title">פתח כרטיסייה חדשה</h2>
+      <button class="modal-close" onclick="closeModal('newTicketModal')">✕</button>
+    </div>
+
+    <form id="newTicketForm" onsubmit="submitNewTicket(event)">
+      <div class="form-group">
+        <label class="form-label">שמך <span class="required">*</span></label>
+        <input type="text" class="form-input" id="ticketName" placeholder="מי פותח הכרטיסייה?" required maxlength="50">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">נושא / כותרת <span class="required">*</span></label>
+        <input type="text" class="form-input" id="ticketTitle" placeholder="בקצרה: מה הבעיה או הבקשה?" required maxlength="120">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">תיאור מפורט</label>
+        <textarea class="form-textarea" id="ticketDesc" placeholder="תאר בפירוט מה קרה, מה ניסית, מה אתה צריך..." rows="4"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">צילום מסך (אופציונלי)</label>
+        <div class="upload-area" id="uploadArea">
+          <input type="file" accept="image/*" id="screenshotInput" onchange="previewImage(event)">
+          <span class="upload-icon">📎</span>
+          <div>לחץ לבחור תמונה או גרור לכאן</div>
+          <div style="font-size:0.78rem;margin-top:4px;opacity:0.7">PNG, JPG, GIF עד 10MB</div>
+        </div>
+        <div class="upload-preview" id="uploadPreview" style="display:none">
+          <img id="previewImg" src="" alt="תצוגה מקדימה">
+          <button type="button" class="remove-img" onclick="removeImage()" title="הסר תמונה">✕</button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full" id="submitBtn">
+        📨 שלח כרטיסייה
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ─── Owner Login Modal ─── -->
+<div class="modal-overlay center" id="ownerModal" style="display:none" onclick="closeIfBackdrop(event,'ownerModal')">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">כניסת בעל הבית</h2>
+      <button class="modal-close" onclick="closeModal('ownerModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">קוד כניסה</label>
+      <input type="password" class="form-input" id="pinInput" placeholder="הכנס קוד..."
+             onkeydown="if(event.key==='Enter')checkPin()">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="checkPin()">כניסה</button>
+  </div>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+
+<script src="./config.js"></script>
+<script>
+// ─── Firebase Init ───
+const isConfigured = CONFIG.firebase.apiKey !== 'REPLACE_WITH_YOUR_API_KEY';
+let db, storage;
+
+if (isConfigured) {
+  firebase.initializeApp(CONFIG.firebase);
+  db = firebase.firestore();
+  storage = firebase.storage();
+} else {
+  document.getElementById('setupBanner').style.display = 'block';
+}
+
+// ─── State ───
+let allTickets = [];
+let currentFilter = 'all';
+let unsubscribe = null;
+
+// ─── Owner Mode ───
+function isOwner() { return sessionStorage.getItem('isOwner') === 'true'; }
+
+function toggleOwner() {
+  if (isOwner()) {
+    sessionStorage.removeItem('isOwner');
+    updateOwnerUI();
+    showToast('יצאת ממצב בעל הבית');
+  } else {
+    openModal('ownerModal');
+    setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  }
+}
+
+function checkPin() {
+  const pin = document.getElementById('pinInput').value;
+  if (pin === String(CONFIG.adminPin)) {
+    sessionStorage.setItem('isOwner', 'true');
+    document.getElementById('pinInput').value = '';
+    closeModal('ownerModal');
+    updateOwnerUI();
+    showToast('ברוך הבא, ' + CONFIG.ownerName + '! 👋', 'success');
+  } else {
+    showToast('קוד שגוי', 'error');
+    document.getElementById('pinInput').select();
+  }
+}
+
+function updateOwnerUI() {
+  const btn = document.getElementById('ownerBtn');
+  if (isOwner()) {
+    btn.classList.add('owner-active');
+    btn.title = 'מצב בעל הבית פעיל — לחץ לצאת';
+    btn.innerHTML = '👑<span class="owner-badge"></span>';
+  } else {
+    btn.classList.remove('owner-active');
+    btn.title = 'כניסת בעל הבית';
+    btn.innerHTML = '👤<span class="owner-badge"></span>';
+  }
+}
+
+// ─── Filter ───
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.filter === filter);
+  });
+  renderTickets();
+}
+
+// ─── Load Tickets ───
+function loadTickets() {
+  if (!isConfigured) {
+    document.getElementById('ticketsList').innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">⚙️</span>
+        <h3>נדרשת הגדרה</h3>
+        <p>ערוך את config.js כדי להתחיל</p>
+      </div>`;
+    return;
+  }
+
+  if (unsubscribe) unsubscribe();
+
+  unsubscribe = db.collection('tickets')
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snapshot => {
+      allTickets = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date()
+      }));
+      updateCounts();
+      renderTickets();
+    }, err => {
+      console.error(err);
+      document.getElementById('ticketsList').innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">⚠️</span>
+          <h3>שגיאה בטעינה</h3>
+          <p>בדוק את הגדרות Firebase ב-config.js</p>
+        </div>`;
+    });
+}
+
+function updateCounts() {
+  const counts = { all: allTickets.length, open: 0, in_progress: 0, resolved: 0 };
+  allTickets.forEach(t => { if (counts[t.status] !== undefined) counts[t.status]++; });
+  Object.entries(counts).forEach(([k, v]) => {
+    const el = document.getElementById('count-' + k);
+    if (el) el.textContent = v;
+  });
+}
+
+function renderTickets() {
+  const list = document.getElementById('ticketsList');
+  const filtered = currentFilter === 'all'
+    ? allTickets
+    : allTickets.filter(t => t.status === currentFilter);
+
+  if (filtered.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">${currentFilter === 'all' ? '🎫' : '🔍'}</span>
+        <h3>${currentFilter === 'all' ? 'אין כרטיסיות עדיין' : 'אין כרטיסיות בסינון זה'}</h3>
+        <p>${currentFilter === 'all' ? 'לחץ על "כרטיסייה חדשה" כדי לפתוח את הראשונה' : 'נסה סינון אחר'}</p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(t => `
+    <a class="ticket-card" href="./ticket.html?id=${t.id}">
+      <div class="card-top">
+        <div class="card-title">${escapeHtml(t.title)}</div>
+        <span class="badge badge-${t.status}">${statusLabel(t.status)}</span>
+      </div>
+      <div class="card-meta">
+        <span>👤 ${escapeHtml(t.submitterName)}</span>
+        <span class="dot"></span>
+        <span>${formatDate(t.createdAt)}</span>
+      </div>
+      ${t.description ? `<div class="card-desc">${escapeHtml(t.description)}</div>` : ''}
+      <div class="card-footer">
+        <span class="replies-count">💬 ${t.repliesCount || 0} תגובות</span>
+        ${t.screenshotUrl ? '<span class="has-screenshot">📎 צילום מסך</span>' : ''}
+      </div>
+    </a>
+  `).join('');
+}
+
+// ─── New Ticket Form ───
+function openNewTicketModal() {
+  const saved = localStorage.getItem('userName') || '';
+  document.getElementById('ticketName').value = saved;
+  openModal('newTicketModal');
+  setTimeout(() => {
+    if (!saved) document.getElementById('ticketName').focus();
+    else document.getElementById('ticketTitle').focus();
+  }, 300);
+}
+
+async function submitNewTicket(e) {
+  e.preventDefault();
+  if (!isConfigured) { showToast('הגדר את config.js תחילה', 'error'); return; }
+
+  const name = document.getElementById('ticketName').value.trim();
+  const title = document.getElementById('ticketTitle').value.trim();
+  const desc = document.getElementById('ticketDesc').value.trim();
+  const file = document.getElementById('screenshotInput').files[0];
+
+  if (!name || !title) return;
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ שולח...';
+
+  try {
+    localStorage.setItem('userName', name);
+
+    // Create ticket doc first to get ID
+    const ticketRef = await db.collection('tickets').add({
+      title,
+      description: desc,
+      submitterName: name,
+      status: 'open',
+      screenshotUrl: null,
+      repliesCount: 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Upload screenshot if provided
+    if (file) {
+      try {
+        const compressed = await compressImage(file, 1600, 0.85);
+        const storageRef = storage.ref(`screenshots/${ticketRef.id}/${file.name}`);
+        const snap = await storageRef.putString(compressed, 'data_url');
+        const url = await snap.ref.getDownloadURL();
+        await ticketRef.update({ screenshotUrl: url });
+      } catch (imgErr) {
+        console.warn('Screenshot upload failed:', imgErr);
+      }
+    }
+
+    // Send ntfy notification
+    sendNtfyNotification(
+      '🎫 כרטיסייה חדשה',
+      `מאת ${name}: ${title}`,
+      ['ticket', 'new'],
+      ticketRef.id
+    );
+
+    closeModal('newTicketModal');
+    resetNewTicketForm();
+    showToast('הכרטיסייה נפתחה בהצלחה! ✅', 'success');
+
+  } catch (err) {
+    console.error(err);
+    showToast('שגיאה בשליחה — נסה שוב', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📨 שלח כרטיסייה';
+  }
+}
+
+function resetNewTicketForm() {
+  document.getElementById('newTicketForm').reset();
+  removeImage();
+}
+
+// ─── Image Handling ───
+function previewImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('previewImg').src = ev.target.result;
+    document.getElementById('uploadPreview').style.display = 'inline-block';
+    document.getElementById('uploadArea').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeImage() {
+  document.getElementById('screenshotInput').value = '';
+  document.getElementById('uploadPreview').style.display = 'none';
+  document.getElementById('uploadArea').style.display = 'block';
+  document.getElementById('previewImg').src = '';
+}
+
+// ─── Utilities ───
+function openModal(id) {
+  document.getElementById(id).style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function closeIfBackdrop(e, id) {
+  if (e.target === e.currentTarget) closeModal(id);
+}
+
+function showToast(msg, type = '') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast' + (type ? ' ' + type : '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.animation = 'none'; t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 2500);
+  setTimeout(() => c.removeChild(t), 2800);
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  return new Intl.DateTimeFormat('he', {
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  }).format(d instanceof Date ? d : d.toDate());
+}
+
+function statusLabel(s) {
+  return { open: '📬 פתוח', in_progress: '🔧 בטיפול', resolved: '✅ נסגר' }[s] || s;
+}
+
+function sendNtfyNotification(title, message, tags = [], ticketId = '') {
+  if (!CONFIG.ntfy.topic || CONFIG.ntfy.topic === 'REPLACE_WITH_SECRET_TOPIC') return;
+  const clickUrl = ticketId
+    ? window.location.origin + window.location.pathname.replace('index.html','') + 'ticket.html?id=' + ticketId
+    : window.location.href;
+  fetch(`${CONFIG.ntfy.server}/${CONFIG.ntfy.topic}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, message, tags, click: clickUrl, priority: 3 })
+  }).catch(() => {});
+}
+
+function compressImage(file, maxWidth, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// ─── Keyboard shortcuts ───
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    ['newTicketModal','ownerModal'].forEach(id => {
+      if (document.getElementById(id).style.display !== 'none') closeModal(id);
+    });
+  }
+});
+
+// ─── Init ───
+updateOwnerUI();
+loadTickets();
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+</script>
+
+</body>
+</html>
