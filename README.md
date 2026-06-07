@@ -1,27 +1,52 @@
-# 🎫 כרטיסיות משפחה — Family Ticketing System
+# 🎫 כרטיסיות משפחה
 
-A simple Hebrew ticketing system for your family to open support tickets, with push notifications via [ntfy.sh](https://ntfy.sh).
+> A dead-simple Hebrew support-ticket web app for your family.  
+> No server. No accounts. Hosted free on GitHub Pages.
 
-**Hosted on GitHub Pages · Powered by Firebase · No server required**
+**Stack:** GitHub Pages · Firebase Firestore · Firebase Storage · [ntfy.sh](https://ntfy.sh)
 
 ---
 
-## Setup (one-time, ~15 minutes)
+## How it works
 
-### Step 1 — Make the repo private
+```
+Family opens a ticket
+    → saved in Firestore (real-time)
+    → push notification sent to your phone via ntfy.sh
 
-In GitHub → Settings → scroll down → change visibility to **Private**.
-This keeps your `config.js` credentials out of public view while the GitHub Pages site remains accessible via URL.
+You reply / change status (owner PIN required)
+    → family sees the update instantly
+```
 
-### Step 2 — Create a Firebase project
+---
 
-1. Go to [console.firebase.google.com](https://console.firebase.google.com) and click **Add project**
-2. Give it a name (e.g. `family-tickets`) → continue through the steps
-3. In the project, click **Firestore Database** → **Create database** → choose **Production mode** → pick a region close to you → Enable
+## Setup guide
 
-### Step 3 — Set Firestore security rules
+Total time: ~15 minutes.
 
-In Firestore → **Rules** tab, paste:
+---
+
+### 1 · Make the repo private
+
+Your `config.js` will contain API keys.  
+In GitHub → **Settings** → **Danger Zone** → **Change visibility** → Private.
+
+> GitHub Pages sites stay publicly accessible by URL even on private repos — only the source code is hidden.
+
+---
+
+### 2 · Create a Firebase project
+
+1. Go to [console.firebase.google.com](https://console.firebase.google.com) → **Add project**
+2. Enter a project name (e.g. `family-tickets`) → click through the steps → **Create project**
+
+---
+
+### 3 · Enable Firestore
+
+1. In the Firebase console left sidebar → **Build** → **Firestore Database**
+2. Click **Create database** → choose **Production mode** → pick a region (e.g. `europe-west1`) → **Enable**
+3. Go to the **Rules** tab and replace the contents with:
 
 ```
 rules_version = '2';
@@ -37,12 +62,14 @@ service cloud.firestore {
 }
 ```
 
-Click **Publish**.
+4. Click **Publish**
 
-### Step 4 — Enable Firebase Storage
+---
 
-1. In Firebase console → **Storage** → **Get started** → Production mode → Enable
-2. In Storage → **Rules** tab, paste:
+### 4 · Enable Firebase Storage
+
+1. Left sidebar → **Build** → **Storage** → **Get started** → Production mode → **Done**
+2. Go to the **Rules** tab, replace with:
 
 ```
 rules_version = '2';
@@ -57,84 +84,155 @@ service firebase.storage {
 }
 ```
 
-Click **Publish**.
+3. Click **Publish**
 
-### Step 5 — Get your Firebase config
+---
 
-1. In Firebase console → **Project Settings** (gear icon) → **General** tab
-2. Scroll to **Your apps** → click **</>** (Web) → register the app
-3. Copy the `firebaseConfig` object values
+### 5 · Get your Firebase config
 
-### Step 6 — Set up ntfy push notifications
+1. Left sidebar → **Project Settings** (⚙️ gear icon) → **General** tab
+2. Scroll down to **Your apps** → click **</>** (Web)
+3. Register the app (any nickname, e.g. `family-tickets-web`) — no need to set up Firebase Hosting
+4. Copy the `firebaseConfig` block — you'll need these values in the next step
 
-1. Download the **ntfy** app: [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) / [iOS](https://apps.apple.com/app/ntfy/id1625396347) / [Web](https://ntfy.sh/app)
-2. Choose a **secret random topic name** — treat it like a password (e.g. `daniel-family-tickets-x7k2m`)
-3. In the ntfy app, subscribe to that topic name
-4. You'll now receive push notifications whenever a ticket is opened or replied to
+---
 
-### Step 7 — Edit config.js
+### 6 · Set up push notifications (ntfy)
 
-Fill in your values in `config.js`:
+1. Install the **ntfy** app on your phone:
+   - [Android — Google Play](https://play.google.com/store/apps/details?id=io.heckel.ntfy)
+   - [iPhone — App Store](https://apps.apple.com/app/ntfy/id1625396347)
+   - Or use [ntfy.sh/app](https://ntfy.sh/app) in any browser
+2. Choose a **secret topic name** — treat it like a password. Make it random and hard to guess, e.g. `cohen-family-tickets-x7k2m9`
+3. In the ntfy app tap **＋** → enter your topic name → **Subscribe**
+
+That's it. Any app that POSTs to `https://ntfy.sh/your-topic` will now ring your phone.
+
+---
+
+### 7 · Fill in config.js
+
+Open `config.js` and replace all placeholder values:
 
 ```javascript
 const CONFIG = {
   firebase: {
-    apiKey: "your-api-key",
-    authDomain: "your-project-id.firebaseapp.com",
+    apiKey: "AIza...",                           // from Firebase console
+    authDomain: "your-project.firebaseapp.com",
     projectId: "your-project-id",
-    storageBucket: "your-project-id.firebasestorage.app",
-    messagingSenderId: "your-sender-id",
-    appId: "your-app-id"
+    storageBucket: "your-project.firebasestorage.app",
+    messagingSenderId: "123456789",
+    appId: "1:123:web:abc"
   },
   ntfy: {
-    topic: "your-secret-topic-name",
+    topic: "cohen-family-tickets-x7k2m9",        // your secret topic
     server: "https://ntfy.sh"
   },
-  adminPin: "your-secret-pin",  // PIN to enter "owner mode"
-  ownerName: "אומר"             // Your name as it appears in replies
+  adminPin: "1234",   // PIN to enter owner mode — pick something only you know
+  ownerName: "אומר"   // Your name as it appears in your replies
 };
 ```
 
-### Step 8 — Enable GitHub Pages
+Commit and push:
 
-1. Push your changes to the `main` branch
-2. Go to repo **Settings** → **Pages**
-3. Under **Source**, select **Deploy from a branch** → `main` → `/ (root)` → Save
-4. Your site will be live at `https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/`
-
-### Step 9 — Add GitHub Pages domain to Firebase
-
-1. In Firebase console → **Authentication** → **Settings** → **Authorized domains**
-2. Add your GitHub Pages domain: `YOUR-USERNAME.github.io`
+```bash
+git add config.js
+git commit -m "Configure Firebase and ntfy"
+git push
+```
 
 ---
 
-## How to use
+### 8 · Enable GitHub Pages
+
+1. Repo → **Settings** → **Pages** (left sidebar)
+2. Under **Source** → **Deploy from a branch**
+3. Branch: `main` · Folder: `/ (root)` → **Save**
+4. Wait ~1 minute → your site is live at:  
+   `https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/`
+
+---
+
+### 9 · Authorize your domain in Firebase
+
+Firebase blocks requests from unknown domains by default.
+
+1. Firebase console → **Authentication** → **Settings** tab → **Authorized domains**
+2. Click **Add domain** → enter `YOUR-USERNAME.github.io` → **Add**
+
+---
+
+### 10 · Share the link
+
+Send your family the URL. Bookmark it. Done.
+
+---
+
+## Using the app
 
 ### For family members
-1. Open the site URL
-2. Click **"כרטיסייה חדשה"** (New Ticket)
-3. Enter your name, describe the problem, optionally attach a screenshot
-4. Submit — you'll get a reply in the ticket
+
+| Action | How |
+|---|---|
+| Open a ticket | Tap **"כרטיסייה חדשה"** → fill in name, subject, description, optional screenshot → Send |
+| Check for replies | Open the ticket from the list |
+| Add a reply | Open the ticket → type in the reply box at the bottom |
 
 ### For you (owner)
-1. Click the 👤 icon in the top corner
-2. Enter your admin PIN → you enter "owner mode" (shown by 👑 icon)
-3. In owner mode you can:
-   - Change ticket status: In Progress / Resolved / Reopen
-   - Reply as yourself (replies show with a blue highlight)
-4. You receive push notifications on your phone via the ntfy app for every new ticket and family reply
+
+| Action | How |
+|---|---|
+| Enter owner mode | Tap 👤 in the top-right corner → enter your PIN → 👑 appears |
+| Change ticket status | Open a ticket → owner controls appear below the description |
+| Reply as yourself | Your replies are highlighted in blue |
+| Exit owner mode | Tap 👑 again |
+
+### Status flow
+
+```
+📬 פתוח (Open)  →  🔧 בטיפול (In Progress)  →  ✅ נסגר (Resolved)
+                                                       ↓
+                                               📬 פתח מחדש (Reopen)
+```
 
 ---
 
-## Features
+## File overview
 
-- 🇮🇱 Full Hebrew RTL interface
-- 📱 Mobile-first, installable as PWA
-- 🔔 Push notifications via ntfy.sh (no account needed)
-- 📎 Screenshot attachments
-- 💬 Threaded replies
-- 🔄 Real-time updates (tickets appear instantly)
-- 🏷️ Status tracking: Open / In Progress / Resolved
-- 🔐 Simple owner PIN for admin actions
-- ☁️ Zero-server: GitHub Pages + Firebase
+```
+index.html      Ticket list page (filter tabs, new-ticket modal)
+ticket.html     Ticket detail page (replies, screenshot, owner controls)
+style.css       Hebrew RTL design, mobile-first
+config.js       ← YOUR SETTINGS GO HERE
+manifest.json   PWA manifest (installable on phones)
+sw.js           Service worker (offline cache)
+.gitignore      Keeps OS/editor clutter out of git
+```
+
+---
+
+## Installing as a phone app (optional)
+
+The site is a PWA — you can install it like a native app:
+
+- **iPhone:** Open in Safari → Share button → "Add to Home Screen"
+- **Android:** Open in Chrome → three-dot menu → "Add to Home Screen" or "Install app"
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Blank page / no tickets loading | Check browser console for Firebase errors. Make sure `config.js` is filled in and the GitHub Pages domain is in Firebase authorized domains. |
+| Screenshots not uploading | Check Firebase Storage rules are published correctly. |
+| No push notifications | Make sure your ntfy topic in `config.js` matches the one you subscribed to in the app. Topics are case-sensitive. |
+| "Permission denied" from Firestore | Re-check and re-publish the Firestore security rules from Step 3. |
+
+---
+
+## Security notes
+
+- **Firestore rules are open** (`allow read, write: if true`) — appropriate for a private family URL. If you want tighter control, see [Firebase security rules docs](https://firebase.google.com/docs/firestore/security/get-started).
+- **Admin PIN is client-side** — it prevents accidental status changes but is not cryptographically secure. This is fine for a family app; don't reuse a sensitive password.
+- **ntfy topic = password** — anyone who knows your topic name can send you push notifications. Keep it random and don't share it.
