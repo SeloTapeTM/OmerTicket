@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>כרטיסייה — כרטיסיות משפחה</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#2563eb">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-inner">
+    <div class="app-title">
+      <span class="icon">🎫</span>
+      כרטיסיות משפחה
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon" id="ownerBtn" title="כניסת בעל הבית" onclick="toggleOwner()">
+        👤
+        <span class="owner-badge"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="app-wrapper">
+
+  <div class="back-bar">
+    <button class="btn-back" onclick="goBack()">
+      → חזרה לרשימה
+    </button>
+    <span id="statusBadge" class="badge"></span>
+  </div>
+
+  <!-- Ticket detail -->
+  <div id="ticketDetail" style="display:none">
+    <div class="ticket-detail-card">
+      <h1 class="ticket-detail-title" id="detailTitle"></h1>
+      <div class="ticket-detail-meta">
+        <span id="detailSubmitter"></span>
+        <span class="dot"></span>
+        <span id="detailDate"></span>
+      </div>
+      <div class="ticket-detail-desc" id="detailDesc"></div>
+
+      <div class="ticket-screenshot" id="screenshotSection" style="display:none">
+        <img id="screenshotImg" src="" alt="צילום מסך" onclick="openLightbox(this.src)">
+      </div>
+
+      <!-- Owner status controls -->
+      <div class="status-controls" id="statusControls" style="display:none">
+        <button class="btn btn-sm btn-warning" id="btnInProgress" onclick="setStatus('in_progress')">🔧 בטיפול</button>
+        <button class="btn btn-sm btn-success" id="btnResolved" onclick="setStatus('resolved')">✅ סגור כרטיסייה</button>
+        <button class="btn btn-sm btn-secondary" id="btnReopen" onclick="setStatus('open')">📬 פתח מחדש</button>
+      </div>
+    </div>
+
+    <!-- Replies section -->
+    <div class="replies-section">
+      <h2 class="replies-section-title">
+        💬 תגובות
+        <span id="repliesCount" style="color:var(--text-muted);font-weight:400;font-size:0.9rem"></span>
+      </h2>
+
+      <div class="replies-list" id="repliesList">
+        <div class="loading">
+          <div class="spinner"></div>
+        </div>
+      </div>
+
+      <!-- Add reply form -->
+      <div class="add-reply" id="addReplySection">
+        <div class="add-reply-header">
+          <input type="text" class="reply-name-input" id="replyName" placeholder="שמך" maxlength="50">
+          <span id="ownerReplyBadge" style="display:none;font-size:0.8rem;background:#eff6ff;color:var(--primary);padding:4px 10px;border-radius:12px;font-weight:600">👑 בעל הבית</span>
+        </div>
+        <textarea class="reply-textarea" id="replyText" placeholder="כתוב תגובה..."></textarea>
+        <button class="btn btn-primary btn-full" id="replyBtn" onclick="submitReply()">
+          ↩️ שלח תגובה
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading state -->
+  <div id="ticketLoading" class="loading">
+    <div class="spinner"></div>
+    <p>טוען כרטיסייה...</p>
+  </div>
+
+  <!-- Error state -->
+  <div id="ticketError" style="display:none">
+    <div class="empty-state">
+      <span class="empty-icon">⚠️</span>
+      <h3>הכרטיסייה לא נמצאה</h3>
+      <p>ייתכן שהיא נמחקה או שהקישור שגוי</p>
+      <br>
+      <a href="./index.html" class="btn btn-primary" style="margin-top:12px">חזור לרשימה</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- Image Lightbox -->
+<div class="lightbox" id="lightbox" style="display:none" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="תמונה מוגדלת">
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Owner Login Modal -->
+<div class="modal-overlay center" id="ownerModal" style="display:none" onclick="closeIfBackdrop(event,'ownerModal')">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">כניסת בעל הבית</h2>
+      <button class="modal-close" onclick="closeModal('ownerModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">קוד כניסה</label>
+      <input type="password" class="form-input" id="pinInput" placeholder="הכנס קוד..."
+             onkeydown="if(event.key==='Enter')checkPin()">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="checkPin()">כניסה</button>
+  </div>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+
+<script src="./config.js"></script>
+<script>
+// ─── Firebase Init ───
+const isConfigured = CONFIG.firebase.apiKey !== 'REPLACE_WITH_YOUR_API_KEY';
+let db, storage;
+if (isConfigured) {
+  firebase.initializeApp(CONFIG.firebase);
+  db = firebase.firestore();
+  storage = firebase.storage();
+}
+
+// ─── State ───
+const ticketId = new URLSearchParams(location.search).get('id');
+let currentTicket = null;
+let repliesUnsub = null;
+
+// ─── Owner Mode ───
+function isOwner() { return sessionStorage.getItem('isOwner') === 'true'; }
+
+function toggleOwner() {
+  if (isOwner()) {
+    sessionStorage.removeItem('isOwner');
+    updateOwnerUI();
+    showToast('יצאת ממצב בעל הבית');
+  } else {
+    openModal('ownerModal');
+    setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  }
+}
+
+function checkPin() {
+  const pin = document.getElementById('pinInput').value;
+  if (pin === String(CONFIG.adminPin)) {
+    sessionStorage.setItem('isOwner', 'true');
+    document.getElementById('pinInput').value = '';
+    closeModal('ownerModal');
+    updateOwnerUI();
+    showToast('ברוך הבא, ' + CONFIG.ownerName + '! 👋', 'success');
+    renderOwnerControls();
+  } else {
+    showToast('קוד שגוי', 'error');
+    document.getElementById('pinInput').select();
+  }
+}
+
+function updateOwnerUI() {
+  const btn = document.getElementById('ownerBtn');
+  const replyNameInput = document.getElementById('replyName');
+  const ownerBadge = document.getElementById('ownerReplyBadge');
+
+  if (isOwner()) {
+    btn.classList.add('owner-active');
+    btn.innerHTML = '👑<span class="owner-badge"></span>';
+    if (replyNameInput) replyNameInput.style.display = 'none';
+    if (ownerBadge) ownerBadge.style.display = 'inline-flex';
+  } else {
+    btn.classList.remove('owner-active');
+    btn.innerHTML = '👤<span class="owner-badge"></span>';
+    if (replyNameInput) replyNameInput.style.display = 'block';
+    if (ownerBadge) ownerBadge.style.display = 'none';
+  }
+}
+
+function renderOwnerControls() {
+  const controls = document.getElementById('statusControls');
+  if (!controls || !currentTicket) return;
+  controls.style.display = isOwner() ? 'flex' : 'none';
+  // Toggle visibility of status buttons based on current status
+  const status = currentTicket.status;
+  document.getElementById('btnInProgress').style.display = status === 'in_progress' ? 'none' : 'inline-flex';
+  document.getElementById('btnResolved').style.display = status === 'resolved' ? 'none' : 'inline-flex';
+  document.getElementById('btnReopen').style.display = status === 'open' ? 'none' : 'inline-flex';
+}
+
+// ─── Load Ticket ───
+async function loadTicket() {
+  if (!ticketId) { showError(); return; }
+  if (!isConfigured) { showError(); return; }
+
+  try {
+    const doc = await db.collection('tickets').doc(ticketId).get();
+    if (!doc.exists) { showError(); return; }
+
+    currentTicket = { id: doc.id, ...doc.data() };
+    renderTicket();
+    loadReplies();
+  } catch (err) {
+    console.error(err);
+    showError();
+  }
+}
+
+function renderTicket() {
+  const t = currentTicket;
+
+  document.title = t.title + ' — כרטיסיות משפחה';
+  document.getElementById('detailTitle').textContent = t.title;
+  document.getElementById('detailSubmitter').textContent = '👤 ' + (t.submitterName || 'אנונימי');
+  document.getElementById('detailDate').textContent = formatDate(t.createdAt?.toDate?.() || new Date());
+  document.getElementById('detailDesc').textContent = t.description || '';
+
+  const badge = document.getElementById('statusBadge');
+  badge.className = 'badge badge-' + t.status;
+  badge.textContent = statusLabel(t.status);
+
+  if (t.screenshotUrl) {
+    document.getElementById('screenshotImg').src = t.screenshotUrl;
+    document.getElementById('screenshotSection').style.display = 'block';
+  }
+
+  document.getElementById('ticketLoading').style.display = 'none';
+  document.getElementById('ticketDetail').style.display = 'block';
+
+  renderOwnerControls();
+}
+
+// ─── Load Replies (realtime) ───
+function loadReplies() {
+  if (repliesUnsub) repliesUnsub();
+
+  repliesUnsub = db.collection('tickets').doc(ticketId)
+    .collection('replies')
+    .orderBy('createdAt', 'asc')
+    .onSnapshot(snap => {
+      const replies = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderReplies(replies);
+      document.getElementById('repliesCount').textContent =
+        replies.length > 0 ? `(${replies.length})` : '';
+    });
+}
+
+function renderReplies(replies) {
+  const list = document.getElementById('repliesList');
+  if (replies.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-muted);font-size:0.875rem;text-align:center;padding:12px 0">אין תגובות עדיין — היה הראשון!</p>';
+    return;
+  }
+
+  list.innerHTML = replies.map(r => {
+    const cls = r.isOwner ? 'owner' : 'family';
+    const name = r.isOwner ? (CONFIG.ownerName || 'בעל הבית') : (r.authorName || 'אנונימי');
+    const time = formatDate(r.createdAt?.toDate?.() || new Date());
+    return `
+      <div class="reply-bubble ${cls}" data-name="${escapeHtml(name)}">
+        ${escapeHtml(r.text)}
+        <span class="reply-time">${time}</span>
+      </div>`;
+  }).join('');
+
+  // Scroll to bottom
+  list.scrollTop = list.scrollHeight;
+}
+
+// ─── Submit Reply ───
+async function submitReply() {
+  if (!isConfigured) { showToast('הגדר את config.js תחילה', 'error'); return; }
+
+  const text = document.getElementById('replyText').value.trim();
+  if (!text) { showToast('כתוב תגובה תחילה', 'error'); return; }
+
+  let authorName;
+  if (isOwner()) {
+    authorName = CONFIG.ownerName || 'בעל הבית';
+  } else {
+    authorName = document.getElementById('replyName').value.trim();
+    if (!authorName) { showToast('הכנס את שמך', 'error'); document.getElementById('replyName').focus(); return; }
+    localStorage.setItem('userName', authorName);
+  }
+
+  const btn = document.getElementById('replyBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ שולח...';
+
+  try {
+    await db.collection('tickets').doc(ticketId)
+      .collection('replies')
+      .add({
+        text,
+        authorName,
+        isOwner: isOwner(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+    // Update reply count on ticket
+    await db.collection('tickets').doc(ticketId).update({
+      repliesCount: firebase.firestore.FieldValue.increment(1),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    document.getElementById('replyText').value = '';
+
+    // Send ntfy notification (only if reply is NOT from owner, so family members notified by default)
+    // If owner replies, notify family (no real way to target specific devices, so always notify)
+    const ticketTitle = currentTicket?.title || 'כרטיסייה';
+    if (isOwner()) {
+      // Owner replied — notify family (they likely check via browser, no push needed for them)
+      // Still send to ntfy in case family also has the app
+    } else {
+      // Family replied — notify owner
+      sendNtfyNotification(
+        '💬 תגובה חדשה',
+        `${authorName} ענה על "${ticketTitle}"`,
+        ['reply'],
+        ticketId
+      );
+    }
+
+    showToast('התגובה נשלחה! ✅', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('שגיאה בשליחה — נסה שוב', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↩️ שלח תגובה';
+  }
+}
+
+// ─── Status Change (Owner only) ───
+async function setStatus(newStatus) {
+  if (!isOwner()) return;
+
+  try {
+    await db.collection('tickets').doc(ticketId).update({
+      status: newStatus,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    currentTicket.status = newStatus;
+    renderTicket();
+    showToast('סטטוס עודכן ✅', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('שגיאה בעדכון', 'error');
+  }
+}
+
+// ─── Lightbox ───
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').style.display = 'flex';
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').style.display = 'none';
+}
+
+// ─── Navigation ───
+function goBack() {
+  if (document.referrer && document.referrer.includes(location.hostname)) {
+    history.back();
+  } else {
+    location.href = './index.html';
+  }
+}
+
+// ─── Error state ───
+function showError() {
+  document.getElementById('ticketLoading').style.display = 'none';
+  document.getElementById('ticketError').style.display = 'block';
+}
+
+// ─── Utilities ───
+function openModal(id) {
+  document.getElementById(id).style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function closeIfBackdrop(e, id) {
+  if (e.target === e.currentTarget) closeModal(id);
+}
+
+function showToast(msg, type = '') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast' + (type ? ' ' + type : '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 2500);
+  setTimeout(() => { if (c.contains(t)) c.removeChild(t); }, 2800);
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  return new Intl.DateTimeFormat('he', {
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  }).format(d instanceof Date ? d : d.toDate());
+}
+
+function statusLabel(s) {
+  return { open: '📬 פתוח', in_progress: '🔧 בטיפול', resolved: '✅ נסגר' }[s] || s;
+}
+
+function sendNtfyNotification(title, message, tags = [], ticketId = '') {
+  if (!CONFIG.ntfy.topic || CONFIG.ntfy.topic === 'REPLACE_WITH_SECRET_TOPIC') return;
+  const clickUrl = location.origin + location.pathname.split('/').slice(0,-1).join('/') + '/ticket.html?id=' + ticketId;
+  fetch(`${CONFIG.ntfy.server}/${CONFIG.ntfy.topic}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, message, tags, click: clickUrl, priority: 3 })
+  }).catch(() => {});
+}
+
+// ─── Keyboard ───
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeLightbox();
+    ['ownerModal'].forEach(id => {
+      if (document.getElementById(id).style.display !== 'none') closeModal(id);
+    });
+  }
+});
+
+// ─── Init ───
+updateOwnerUI();
+
+// Prefill name from localStorage
+const savedName = localStorage.getItem('userName') || '';
+if (savedName && document.getElementById('replyName')) {
+  document.getElementById('replyName').value = savedName;
+}
+
+loadTicket();
+</script>
+
+</body>
+</html>
