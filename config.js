@@ -1,6 +1,14 @@
-// =============================================
-// הגדרות - מלא את הפרטים שלך כאן
-// =============================================
+// ─────────────────────────────────────────────────────────────
+// This file is a TEMPLATE. Real values are injected by GitHub
+// Actions at deploy time — never commit secrets here.
+//
+// To configure the app, add these as GitHub Actions secrets:
+//   FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN, FIREBASE_PROJECT_ID,
+//   FIREBASE_STORAGE_BUCKET, FIREBASE_MESSAGING_SENDER_ID,
+//   FIREBASE_APP_ID, NTFY_TOPIC, ADMIN_PIN, OWNER_NAME
+//
+// See README.md → Step 7 for full instructions.
+// ─────────────────────────────────────────────────────────────
 const CONFIG = {
   firebase: {
     apiKey: "REPLACE_WITH_YOUR_API_KEY",
@@ -11,12 +19,9 @@ const CONFIG = {
     appId: "REPLACE_WITH_YOUR_APP_ID"
   },
   ntfy: {
-    // בחר שם נושא סודי אקראי (זהו ה"סיסמה" לקבל התראות)
     topic: "REPLACE_WITH_SECRET_TOPIC",
     server: "https://ntfy.sh"
   },
-  // קוד כניסה לבעל המערכת (אתה)
   adminPin: "REPLACE_WITH_YOUR_PIN",
-  // שמך שיופיע בתגובות שלך
   ownerName: "אומר"
 };

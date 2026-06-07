@@ -4,8 +4,9 @@ const ASSETS = [
   './index.html',
   './ticket.html',
   './style.css',
-  './config.js',
   './manifest.json'
+  // config.js is intentionally excluded — it is generated at deploy time
+  // and must always be fetched fresh so secrets are never stale-cached
 ];
 
 self.addEventListener('install', e => {
@@ -23,8 +24,9 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Network-first for Firebase, cache-first for app shell
-  if (e.request.url.includes('firebasejs') || e.request.url.includes('firestore') || e.request.url.includes('googleapis')) {
+  const url = e.request.url;
+  // Always network-first for: config (generated at deploy), Firebase SDKs, remote APIs
+  if (url.includes('config.js') || url.includes('firebasejs') || url.includes('googleapis')) {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
